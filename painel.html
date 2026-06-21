@@ -617,7 +617,15 @@ $("importFile").onchange=e=>{
   document.head.appendChild(link);
   // apple touch icon
   const al=document.createElement("link"); al.rel="apple-touch-icon"; al.href=icon(180); document.head.appendChild(al);
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+  if("serviceWorker" in navigator){
+    let refreshing=false;
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(refreshing) return; refreshing=true; location.reload(); });
+    navigator.serviceWorker.register("sw.js").then(reg=>{
+      reg.update();
+      setInterval(()=>reg.update(), 60*1000); // checa a cada 1 min
+      document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") reg.update(); });
+    }).catch(()=>{});
+  }
 })();
 </script>
 </body>
