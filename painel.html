@@ -52,11 +52,22 @@
 
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:11px;}
   .daygroup{font-size:13px;font-weight:700;color:var(--accent-deep);text-transform:uppercase;letter-spacing:.5px;margin:18px 2px 8px;}
-  .ag-time{font-family:'Fraunces',serif;font-size:22px;color:var(--accent);font-weight:600;line-height:1;}
-  .ag-row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
-  .ag-serv{font-weight:600;}
-  .ag-meta{font-size:13px;color:var(--ink-soft);margin-top:3px;}
-  .ag-actions{display:flex;gap:8px;margin-top:12px;}
+  .ag-card{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 4px 14px rgba(46,26,36,.05);}
+  .ag-top{display:flex;align-items:center;gap:13px;}
+  .ag-chip{flex:0 0 auto;background:var(--accent-soft);color:var(--accent-deep);border-radius:13px;padding:7px 13px;text-align:center;line-height:1.05;}
+  .ag-chip b{font-family:'Fraunces',serif;font-size:22px;font-weight:600;display:block;}
+  .ag-chip span{font-size:10px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.3px;}
+  .ag-titlewrap{min-width:0;}
+  .ag-title{font-family:'Fraunces',serif;font-size:18px;font-weight:600;line-height:1.1;}
+  .ag-price{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+  .ag-lines{display:flex;flex-direction:column;gap:7px;padding:11px 0;margin-top:12px;border-top:1px solid var(--line);}
+  .ag-line{display:flex;align-items:center;gap:9px;font-size:14.5px;}
+  .ag-ic{flex:0 0 20px;text-align:center;font-size:14px;opacity:.9;}
+  .ag-line b{font-weight:600;}
+  .ag-line a{color:var(--accent-deep);text-decoration:none;font-weight:600;}
+  .ag-obs{background:var(--accent-soft);border-radius:11px;padding:9px 12px;font-size:14px;color:var(--ink);margin-bottom:11px;line-height:1.4;}
+  .ag-obs b{font-weight:700;color:var(--accent-deep);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px;}
+  .ag-actions{display:flex;gap:8px;}
   .mini{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);}
   .mini.wa{border-color:var(--ok);color:var(--ok);} .mini.del{border-color:var(--danger);color:var(--danger);}
   .empty{text-align:center;color:var(--ink-soft);padding:40px 20px;}
@@ -269,8 +280,10 @@ function entrarDemo(){
   toast("Modo demonstração — alterações não são salvas.");
 }
 function demoAgendaHTML(){
-  const card=(serv,cli,prof,hora)=>'<div class="card"><div class="ag-row"><div><div class="ag-serv">'+serv+'</div><div class="ag-meta">'+cli+' • '+prof+'</div></div><div class="ag-time">'+hora+'</div></div><div class="ag-actions"><button class="mini wa">WhatsApp</button><button class="mini del">Cancelar</button></div></div>';
-  return '<div class="daygroup">Exemplo — hoje</div>'+card("Corte feminino","Maria Souza","Patrícia","10:00")+card("Coloração","Joana Lima","Ana","14:00")+
+  const ex=(servico,cliente,profissional,inicio,duracao,preco,fone,obs)=>agCard({servico,cliente,profissional,inicio,duracao,preco,fone,obs},true);
+  return '<div class="daygroup">Exemplo — hoje</div>'+
+    ex("Manicure","Maria Souza","Patrícia","10:00",40,"R$ 35","(31) 98888-0000","Quero esmalte vermelho e capricho na cutícula")+
+    ex("Coloração","Joana Lima","Ana","14:00",120,"R$ 120","(31) 97777-1111","")+
     '<p class="note" style="text-align:center;margin-top:14px">Estes são só exemplos. Os agendamentos reais aparecem aqui quando o Firebase estiver ligado.</p>';
 }
 
@@ -306,6 +319,26 @@ document.querySelectorAll(".nav button").forEach(b=>{
 
 /* ---------- AGENDA ---------- */
 $("btnRefresh").onclick=carregarAgenda;
+
+function agCard(it,isDemo){
+  const foneDig=(it.fone||"").replace(/\D/g,"");
+  const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
+  const waBtn = wa ? '<button class="mini wa"'+(isDemo?'':' onclick="abrirWa(\''+wa+'\')"')+'>WhatsApp</button>' : '';
+  const delBtn = isDemo ? '<button class="mini del">Cancelar</button>'
+    : '<button class="mini del" onclick="cancelar(\''+it.date+'\',\''+it.profPath+'\',\''+it.id+'\','+toMin(it.inicio)+','+it.duracao+')">Cancelar</button>';
+  return '<div class="ag-card">'+
+    '<div class="ag-top"><div class="ag-chip"><b>'+it.inicio+'</b>'+(it.duracao?'<span>'+it.duracao+' min</span>':'')+'</div>'+
+      '<div class="ag-titlewrap"><div class="ag-title">'+esc(it.servico)+'</div>'+(it.preco?'<div class="ag-price">'+esc(it.preco)+'</div>':'')+'</div></div>'+
+    '<div class="ag-lines">'+
+      '<div class="ag-line"><span class="ag-ic">👤</span><span><b>'+esc(it.cliente)+'</b></span></div>'+
+      (it.fone?'<div class="ag-line"><span class="ag-ic">📞</span><span>'+esc(it.fone)+'</span></div>':'')+
+      (it.profissional?'<div class="ag-line"><span class="ag-ic">✂️</span><span>'+esc(it.profissional)+'</span></div>':'')+
+    '</div>'+
+    (it.obs?'<div class="ag-obs"><b>O que ela quer</b>'+esc(it.obs)+'</div>':'')+
+    '<div class="ag-actions">'+waBtn+delBtn+'</div>'+
+  '</div>';
+}
+
 function carregarAgenda(){
   const box=$("agendaList");
   if(demo){ box.innerHTML=demoAgendaHTML(); return; }
@@ -322,15 +355,7 @@ function carregarAgenda(){
     let html="", curDate="";
     itens.forEach(it=>{
       if(it.date!==curDate){ curDate=it.date; html+='<div class="daygroup">'+extenso(it.date)+'</div>'; }
-      const foneDig=(it.fone||"").replace(/\D/g,""); const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
-      html+='<div class="card"><div class="ag-row"><div><div class="ag-serv">'+esc(it.servico)+'</div>'+
-        '<div class="ag-meta">'+esc(it.cliente)+(it.profissional?" • "+esc(it.profissional):"")+'</div>'+
-        (it.obs?'<div class="ag-meta">📝 '+esc(it.obs)+'</div>':"")+
-        '</div><div class="ag-time">'+it.inicio+'</div></div>'+
-        '<div class="ag-actions">'+
-        (wa?'<button class="mini wa" onclick="abrirWa(\''+wa+'\')">WhatsApp</button>':'')+
-        '<button class="mini del" onclick="cancelar(\''+it.date+'\',\''+it.profPath+'\',\''+it.id+'\','+toMin(it.inicio)+','+it.duracao+')">Cancelar</button>'+
-        '</div></div>';
+      html+=agCard(it,false);
     });
     box.innerHTML=html;
   }).catch(()=>{ box.innerHTML='<div class="empty">Erro ao carregar.</div>'; });
