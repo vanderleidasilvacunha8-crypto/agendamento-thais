@@ -114,7 +114,6 @@
     <input id="senha" type="password" placeholder="Senha" autocomplete="current-password">
     <div class="err" id="loginErr"></div>
     <button class="btn" id="btnEntrar">Entrar</button>
-    <button class="btn ghost" id="btnDemo" style="margin-top:10px">👁 Ver demonstração</button>
   </div>
   <p class="note" style="max-width:320px;margin-top:18px">Esqueceu a senha? Fale com quem instalou o sistema.</p>
 </div>
@@ -295,8 +294,7 @@ if(FB_OK){
 }
 $("btnSair").onclick=()=>{ if(demo||!auth){ demo=false; location.reload(); } else auth.signOut(); };
 
-/* ---------- MODO DEMONSTRAÇÃO (sem Firebase, sem salvar) ---------- */
-$("btnDemo").onclick=entrarDemo;
+/* ---------- MODO DEMONSTRAÇÃO (desativado — botão removido) ---------- */
 function entrarDemo(){
   demo=true;
   $("login").style.display="none"; $("app").style.display="block";
