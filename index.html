@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Agendamento</title>
+
+<!-- ================================================================= -->
+<!--  PÁGINA DE AGENDAMENTO (cliente).                                 -->
+<!--  Lê serviços/horários do Firebase (editados no painel da dona).   -->
+<!--  Use o MESMO projeto Firebase do painel.html.                     -->
+<!--  Edite só o bloco "INICIO CONFIG".                                -->
+<!-- ================================================================= -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<style>
+  :root{--bg:#FBF5F2;--surface:#FFFFFF;--ink:#2E1A24;--ink-soft:#7A6470;--accent:#C0466B;--accent-deep:#9A2F50;--accent-soft:#F7E5EA;--line:#EFE0E3;--wa:#25D366;--shadow:0 6px 24px rgba(46,26,36,.08);--radius:18px;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:120px;}
+  header{text-align:center;padding:38px 20px 26px;background:radial-gradient(120% 90% at 50% -10%, var(--accent-soft) 0%, var(--bg) 60%);border-bottom:1px solid var(--line);}
+  .logo{font-family:'Fraunces',serif;font-weight:500;font-size:34px;letter-spacing:-.5px;line-height:1.05;margin:0;}
+  .logo span{color:var(--accent);font-style:italic;}
+  .tagline{color:var(--ink-soft);font-size:14px;margin:8px 0 0;}
+  .addr{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-size:13px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);padding:6px 12px;border-radius:999px;}
+  main{max-width:520px;margin:0 auto;padding:8px 16px 20px;}
+  .step{margin-top:26px;}
+  .step-head{display:flex;align-items:center;gap:10px;margin:0 0 14px;}
+  .step-num{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .step-title{font-family:'Fraunces',serif;font-weight:500;font-size:20px;margin:0;}
+  .grid{display:grid;gap:10px;}
+  .card{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px;transition:border-color .15s, transform .08s, box-shadow .15s;}
+  .card:active{transform:scale(.99);}
+  .card.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .card .name{font-weight:600;font-size:15.5px;}
+  .card .meta{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+  .card .price{font-weight:700;color:var(--accent-deep);white-space:nowrap;font-size:15px;}
+  .check{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:0 0 22px;display:flex;align-items:center;justify-content:center;transition:.15s;}
+  .card.sel .check{background:var(--accent);border-color:var(--accent);}
+  .card.sel .check::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translateY(-1px);}
+  .pills{display:flex;flex-wrap:wrap;gap:9px;}
+  .pill{background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:.12s;color:var(--ink);}
+  .pill:active{transform:scale(.97);}
+  .pill.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .pill.off{opacity:.35;pointer-events:none;text-decoration:line-through;}
+  .dates{display:flex;gap:9px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
+  .dates::-webkit-scrollbar{display:none;}
+  .date{scroll-snap-align:start;flex:0 0 auto;text-align:center;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:10px 14px;cursor:pointer;min-width:58px;transition:.12s;}
+  .date:active{transform:scale(.97);}
+  .date.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .date.off{opacity:.3;pointer-events:none;}
+  .date .dow{font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+  .date .dnum{font-family:'Fraunces',serif;font-size:21px;font-weight:500;margin-top:2px;}
+  .date .mon{font-size:10px;text-transform:uppercase;opacity:.7;}
+  .empty-slots{font-size:14px;color:var(--ink-soft);padding:6px 2px;}
+  .loading{font-size:13px;color:var(--accent);padding:6px 2px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink-soft);}
+  .field input,.field textarea{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:13px 15px;font-size:16px;font-family:inherit;background:var(--surface);color:var(--ink);transition:border-color .15s;}
+  .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent);}
+  .field textarea{resize:none;min-height:64px;}
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom));}
+  .bar-inner{max-width:520px;margin:0 auto;}
+  .summary{font-size:13px;color:var(--ink-soft);margin:0 0 9px;min-height:18px;line-height:1.35;}
+  .summary b{color:var(--ink);font-weight:600;}
+  .btn{width:100%;border:none;border-radius:15px;padding:16px;font-family:inherit;font-size:16px;font-weight:700;color:#fff;background:var(--wa);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;transition:.15s;box-shadow:0 6px 18px rgba(37,211,102,.32);}
+  .btn:active{transform:scale(.99);} .btn:disabled{background:#cdbfc6;box-shadow:none;cursor:not-allowed;}
+  .btn svg{width:20px;height:20px;fill:#fff;}
+  .done{display:none;text-align:center;padding:60px 24px;}
+  .done.show{display:block;}
+  .done .ico{width:76px;height:76px;border-radius:50%;background:var(--accent-soft);margin:0 auto 18px;display:flex;align-items:center;justify-content:center;}
+  .done .ico::after{content:"";width:18px;height:34px;border:solid var(--accent);border-width:0 5px 5px 0;transform:rotate(45deg) translateY(-4px);}
+  .done h2{font-family:'Fraunces',serif;font-weight:500;font-size:26px;margin:0 0 8px;}
+  .done p{color:var(--ink-soft);margin:0 auto;max-width:340px;}
+  .done .again{margin-top:24px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);box-shadow:none;}
+  .toast{position:fixed;left:50%;bottom:140px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:13px 18px;border-radius:12px;font-size:14px;font-weight:500;max-width:88%;text-align:center;opacity:0;pointer-events:none;transition:.25s;z-index:50;box-shadow:var(--shadow);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .footer{text-align:center;font-size:12px;color:var(--ink-soft);padding:24px 16px 10px;}
+  #boot{text-align:center;padding:80px 20px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 class="logo" id="hdrLogo">Carregando…</h1>
+  <p class="tagline" id="hdrTag"></p>
+  <div class="addr" id="hdrAddr" style="display:none">📍 <span></span></div>
+</header>
+
+<div id="boot">Carregando…</div>
+
+<main id="formArea" style="display:none">
+  <section class="step"><div class="step-head"><div class="step-num">1</div><h2 class="step-title">Escolha o serviço</h2></div><div class="grid" id="services"></div></section>
+  <section class="step" id="profStep"><div class="step-head"><div class="step-num">2</div><h2 class="step-title">Profissional</h2></div><div class="pills" id="pros"></div></section>
+  <section class="step"><div class="step-head"><div class="step-num" id="numDate">3</div><h2 class="step-title">Escolha o dia</h2></div><div class="dates" id="dates"></div></section>
+  <section class="step"><div class="step-head"><div class="step-num" id="numTime">4</div><h2 class="step-title">Horário</h2></div><div class="pills" id="times"></div><p class="empty-slots" id="timesHint">Selecione um dia para ver os horários.</p></section>
+  <section class="step"><div class="step-head"><div class="step-num" id="numData">5</div><h2 class="step-title">Seus dados</h2></div>
+    <div class="field"><label for="cname">Nome completo</label><input id="cname" type="text" placeholder="Seu nome" autocomplete="name"></div>
+    <div class="field"><label for="cphone">WhatsApp (com DDD)</label><input id="cphone" type="tel" inputmode="numeric" placeholder="(31) 9 9999-9999" autocomplete="tel"></div>
+    <div class="field"><label for="cnote">Observação (opcional)</label><textarea id="cnote" placeholder="Ex: cabelo abaixo do ombro, alergia a algum produto..."></textarea></div>
+  </section>
+</main>
+
+<div class="done" id="done">
+  <div class="ico"></div><h2>Horário reservado!</h2>
+  <p>Seu agendamento foi confirmado e enviado pelo WhatsApp. Te esperamos! 💕</p>
+  <button class="btn again" id="againBtn">Fazer outro agendamento</button>
+</div>
+
+<div class="bar" id="bar" style="display:none">
+  <div class="bar-inner">
+    <p class="summary" id="summary">Comece escolhendo um serviço.</p>
+    <button class="btn" id="confirm" disabled>
+      <svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.51 5.26l-.999 3.648 3.778-.99zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+      <span id="confirmText">Agendar e reservar horário</span>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="footer">Agendamento online</div>
+
+<script>
+/* ============================================================= */
+/* ===================  INICIO CONFIG  ========================= */
+/*  Cole a config do MESMO Firebase do painel.html.              */
+/*  Os valores abaixo são reserva, caso o Firebase falhe.        */
+const CONFIG = {
+  nomeSalao:"Studio Bella", tagline:"Beleza & cuidado • agende seu horário",
+  endereco:"", whatsapp:"5531989892315",
+  servicos:[
+    {nome:"Corte feminino",duracao:60,preco:"R$ 60"},
+    {nome:"Escova",duracao:45,preco:"R$ 45"},
+    {nome:"Coloração",duracao:120,preco:"R$ 120"},
+    {nome:"Manicure",duracao:40,preco:"R$ 35"},
+  ],
+  profissionais:["Patrícia","Ana"],
+  horarios:{0:null,1:{abre:"09:00",fecha:"19:00"},2:{abre:"09:00",fecha:"19:00"},3:{abre:"09:00",fecha:"19:00"},4:{abre:"09:00",fecha:"19:00"},5:{abre:"09:00",fecha:"20:00"},6:{abre:"08:00",fecha:"17:00"}},
+  intervaloSlots:30, diasParaFrente:21,
+  firebase:{
+    apiKey:"AIzaSyCBhVFE2SquRFH-KOfKyDyK7WNFmYuN-kI", authDomain:"agendamento-thais.firebaseapp.com",
+    databaseURL:"https://agendamento-thais-default-rtdb.firebaseio.com",
+    projectId:"agendamento-thais", storageBucket:"agendamento-thais.firebasestorage.app",
+    messagingSenderId:"614910874763", appId:"1:614910874763:web:409da47a0f0467c1eff08e"
+  },
+};
+/* ====================  FIM CONFIG  =========================== */
+/* ============================================================= */
+
+const DOW=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const MON=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+const state={servico:null,prof:null,data:null,hora:null};
+let currentLocks={};
+let db=null, fbReady=false;
+const $=id=>document.getElementById(id);
+
+(function initFirebase(){
+  const f=CONFIG.firebase;
+  if(!f||!f.databaseURL||f.databaseURL.indexOf("SEU-PROJETO")>=0){ console.warn("Firebase não configurado — modo só WhatsApp."); return; }
+  try{ firebase.initializeApp(f); db=firebase.database(); fbReady=true; }catch(e){ console.warn(e); }
+})();
+
+function applyRemote(rc){
+  if(!rc) return;
+  if(rc.nomeSalao) CONFIG.nomeSalao=rc.nomeSalao;
+  if(rc.tagline!=null) CONFIG.tagline=rc.tagline;
+  if(rc.endereco!=null) CONFIG.endereco=rc.endereco;
+  if(rc.whatsapp) CONFIG.whatsapp=rc.whatsapp;
+  if(rc.intervaloSlots) CONFIG.intervaloSlots=rc.intervaloSlots;
+  if(rc.diasParaFrente) CONFIG.diasParaFrente=rc.diasParaFrente;
+  if(rc.servicos) CONFIG.servicos=Array.isArray(rc.servicos)?rc.servicos:Object.values(rc.servicos);
+  if(rc.profissionais) CONFIG.profissionais=Array.isArray(rc.profissionais)?rc.profissionais:Object.values(rc.profissionais);
+  if(rc.horarios) CONFIG.horarios=rc.horarios;
+}
+if(fbReady){
+  db.ref("config").once("value").then(s=>{ if(s.exists()) applyRemote(s.val()); }).catch(e=>console.warn(e)).finally(iniciar);
+}else{ iniciar(); }
+
+function iniciar(){
+  $("boot").style.display="none";
+  $("formArea").style.display="block";
+  $("bar").style.display="block";
+  montarHeader(); montarServicos(); montarProfissionais(); montarDatas(); update();
+}
+
+function sanitize(s){return String(s).replace(/[.#$\[\]\/]/g,"_").trim();}
+function dateKey(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function profKey(){ if(!CONFIG.profissionais||!CONFIG.profissionais.length) return "geral"; return state.prof?sanitize(state.prof):null; }
+function toMin(h){const[a,b]=h.split(":").map(Number);return a*60+b;}
+function fmt(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");}
+function slotKey(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,"0")+String(m).padStart(2,"0");}
+function neededKeys(start,dur){const iv=CONFIG.intervaloSlots,k=[];for(let s=start;s<start+dur;s+=iv)k.push(slotKey(s));return k;}
+function dataExtenso(d){return DOW[d.getDay()]+", "+d.getDate()+" de "+MON[d.getMonth()];}
+
+function montarHeader(){
+  const p=CONFIG.nomeSalao.trim().split(" ");
+  $("hdrLogo").innerHTML = p.length>1 ? p.slice(0,-1).join(" ")+" <span>"+p.slice(-1)+"</span>" : CONFIG.nomeSalao;
+  $("hdrTag").textContent=CONFIG.tagline||"";
+  if(CONFIG.endereco){ $("hdrAddr").style.display="inline-flex"; $("hdrAddr").querySelector("span").textContent=CONFIG.endereco; }
+  document.title="Agendamento — "+CONFIG.nomeSalao;
+}
+
+function montarServicos(){
+  const servEl=$("services"); servEl.innerHTML="";
+  CONFIG.servicos.forEach(s=>{
+    const c=document.createElement("div"); c.className="card";
+    c.innerHTML='<div><div class="name">'+s.nome+'</div><div class="meta">'+s.duracao+' min</div></div>'+
+      '<div style="display:flex;align-items:center;gap:12px"><div class="price">'+s.preco+'</div><div class="check"></div></div>';
+    c.onclick=()=>{ state.servico=s; [...servEl.children].forEach(x=>x.classList.remove("sel")); c.classList.add("sel"); state.hora=null; buildTimes(); update(); };
+    servEl.appendChild(c);
+  });
+}
+
+function montarProfissionais(){
+  const profStep=$("profStep"), prosEl=$("pros"); prosEl.innerHTML="";
+  if(CONFIG.profissionais&&CONFIG.profissionais.length){
+    profStep.style.display="";
+    CONFIG.profissionais.forEach(p=>{
+      const b=document.createElement("div"); b.className="pill"; b.textContent=p;
+      b.onclick=()=>{ state.prof=p; state.hora=null; [...prosEl.children].forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); refreshTimes(); update(); };
+      prosEl.appendChild(b);
+    });
+  }else{
+    profStep.style.display="none";
+    $("numDate").textContent="2"; $("numTime").textContent="3"; $("numData").textContent="4";
+  }
+}
+
+function montarDatas(){
+  const datesEl=$("dates"); datesEl.innerHTML="";
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  for(let i=0;i<CONFIG.diasParaFrente;i++){
+    const d=new Date(hoje); d.setDate(hoje.getDate()+i);
+    const cfg=CONFIG.horarios[d.getDay()];
+    const el=document.createElement("div"); el.className="date"+(cfg?"":" off");
+    el.innerHTML='<div class="dow">'+DOW[d.getDay()]+'</div><div class="dnum">'+d.getDate()+'</div><div class="mon">'+MON[d.getMonth()]+'</div>';
+    if(cfg){ el.onclick=()=>{ state.data=d; state.hora=null; [...datesEl.children].forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); refreshTimes(); update(); }; }
+    datesEl.appendChild(el);
+  }
+}
+
+const timesEl=()=>$("times"), timesHint=()=>$("timesHint");
+function refreshTimes(){
+  const pKey=profKey();
+  if(!fbReady||!state.data||!pKey){ currentLocks={}; buildTimes(); return; }
+  const h=timesHint(); h.style.display="block"; h.className="loading"; h.textContent="Verificando horários disponíveis...";
+  db.ref("locks/"+dateKey(state.data)+"/"+pKey).once("value")
+    .then(s=>{ currentLocks=s.exists()?s.val():{}; })
+    .catch(e=>{ console.warn(e); currentLocks={}; })
+    .finally(()=>{ h.className="empty-slots"; buildTimes(); });
+}
+function buildTimes(){
+  const T=timesEl(), H=timesHint(); T.innerHTML="";
+  const precisaProf=CONFIG.profissionais&&CONFIG.profissionais.length;
+  if(precisaProf&&!state.prof){ H.style.display="block"; H.textContent="Escolha o profissional primeiro."; return; }
+  if(!state.data){ H.style.display="block"; H.textContent="Selecione um dia para ver os horários."; return; }
+  const cfg=CONFIG.horarios[state.data.getDay()];
+  if(!cfg){ H.style.display="block"; H.textContent="Fechado neste dia."; return; }
+  const dur=state.servico?state.servico.duracao:CONFIG.intervaloSlots;
+  const abre=toMin(cfg.abre), fecha=toMin(cfg.fecha);
+  const agora=new Date(), ehHoje=state.data.toDateString()===agora.toDateString(), minAgora=agora.getHours()*60+agora.getMinutes();
+  let achou=false;
+  for(let t=abre; t+dur<=fecha; t+=CONFIG.intervaloSlots){
+    const passou=ehHoje&&t<=minAgora+15;
+    const ocupado=neededKeys(t,dur).some(k=>currentLocks[k]);
+    const indisp=passou||ocupado;
+    const p=document.createElement("div"); p.className="pill"+(indisp?" off":""); p.textContent=fmt(t);
+    if(!indisp){ achou=true; p.onclick=()=>{ state.hora=fmt(t); [...T.children].forEach(x=>x.classList.remove("sel")); p.classList.add("sel"); update(); }; }
+    T.appendChild(p);
+  }
+  H.style.display=achou?"none":"block";
+  if(!achou) H.textContent="Sem horários disponíveis neste dia. Tente outro.";
+}
+
+const phoneIn=$("cphone");
+phoneIn.addEventListener("input",()=>{
+  let v=phoneIn.value.replace(/\D/g,"").slice(0,11);
+  if(v.length>10) v=v.replace(/(\d{2})(\d{5})(\d{0,4})/,"($1) $2-$3");
+  else if(v.length>6) v=v.replace(/(\d{2})(\d{4})(\d{0,4})/,"($1) $2-$3");
+  else if(v.length>2) v=v.replace(/(\d{2})(\d{0,5})/,"($1) $2");
+  else if(v.length>0) v=v.replace(/(\d{0,2})/,"($1");
+  phoneIn.value=v; update();
+});
+$("cname").addEventListener("input",update);
+
+function update(){
+  const nome=$("cname").value.trim(), fone=phoneIn.value.replace(/\D/g,"");
+  const precisaProf=CONFIG.profissionais&&CONFIG.profissionais.length;
+  const ok=state.servico&&state.data&&state.hora&&nome&&fone.length>=10&&(!precisaProf||state.prof);
+  const S=$("summary");
+  if(state.servico&&state.data&&state.hora) S.innerHTML="<b>"+state.servico.nome+"</b> • "+dataExtenso(state.data)+" às <b>"+state.hora+"</b>"+(state.prof?" • com "+state.prof:"");
+  else if(state.servico) S.innerHTML="<b>"+state.servico.nome+"</b> — agora escolha o dia e horário.";
+  else S.textContent="Comece escolhendo um serviço.";
+  $("confirm").disabled=!ok;
+}
+
+let toastTimer=null;
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),3500);}
+
+function tentarReservar(dk,pKey,keys,bookingId){
+  return db.ref("locks/"+dk+"/"+pKey).transaction(cur=>{
+    cur=cur||{};
+    for(const k of keys){ if(cur[k]) return; }
+    for(const k of keys){ cur[k]=bookingId; }
+    return cur;
+  }).then(r=>r.committed);
+}
+
+$("confirm").onclick=async ()=>{
+  const nome=$("cname").value.trim(), fone=phoneIn.value.trim(), obs=$("cnote").value.trim();
+  const startMin=toMin(state.hora), dur=state.servico.duracao, keys=neededKeys(startMin,dur);
+  const btn=$("confirm"), txt=$("confirmText"), orig=txt.textContent; btn.disabled=true;
+
+  if(fbReady){
+    txt.textContent="Reservando...";
+    const dk=dateKey(state.data), pKey=profKey(), bookingId=db.ref().push().key;
+    let ok=false;
+    try{ ok=await tentarReservar(dk,pKey,keys,bookingId); }
+    catch(e){ console.warn(e); toast("Erro de conexão. Tente de novo."); txt.textContent=orig; btn.disabled=false; return; }
+    if(!ok){ toast("Ops! Esse horário acabou de ser reservado. Escolha outro 👇"); txt.textContent=orig; state.hora=null; refreshTimes(); update(); return; }
+    db.ref("agendamentos/"+dk+"/"+pKey+"/"+bookingId).set({
+      cliente:nome, fone:fone, servico:state.servico.nome, preco:state.servico.preco,
+      profissional:state.prof||"", inicio:state.hora, duracao:dur, obs:obs, criadoEm:Date.now()
+    }).catch(e=>console.warn(e));
+  }
+
+  let msg="*Novo agendamento — "+CONFIG.nomeSalao+"*\n\n";
+  msg+="👤 *Cliente:* "+nome+"\n📱 *Contato:* "+fone+"\n";
+  msg+="💇 *Serviço:* "+state.servico.nome+" ("+state.servico.preco+")\n";
+  if(state.prof) msg+="✂️ *Profissional:* "+state.prof+"\n";
+  msg+="📅 *Dia:* "+dataExtenso(state.data)+"\n⏰ *Horário:* "+state.hora+"\n";
+  if(obs) msg+="📝 *Obs:* "+obs+"\n";
+  msg+="\nHorário reservado pelo site. ✅";
+  window.open("https://wa.me/"+CONFIG.whatsapp+"?text="+encodeURIComponent(msg),"_blank");
+
+  $("formArea").style.display="none"; $("bar").style.display="none";
+  $("done").classList.add("show"); window.scrollTo(0,0);
+};
+$("againBtn").onclick=()=>location.reload();
+</script>
+</body>
+</html>
