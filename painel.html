@@ -71,6 +71,12 @@
   .mini{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);}
   .mini.wa{border-color:var(--ok);color:var(--ok);} .mini.del{border-color:var(--danger);color:var(--danger);}
   .mini.edit{border-color:var(--accent);color:var(--accent);}
+  .mini.ok2{border-color:var(--ok);color:var(--ok);}
+  .mini.ok2.done{background:var(--ok);color:#fff;border-color:var(--ok);}
+  .resumo{background:var(--accent-soft);color:var(--accent-deep);border-radius:12px;padding:11px 14px;font-size:14.5px;margin-bottom:12px;text-align:center;}
+  .resumo b{font-weight:700;}
+  .ag-badge{display:inline-block;background:var(--ok);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;letter-spacing:.3px;}
+  .ag-card.atendida{opacity:.72;}
   .modal{position:fixed;inset:0;z-index:80;background:rgba(46,26,36,.45);display:none;align-items:flex-end;justify-content:center;}
   .modal.show{display:flex;}
   .modal-box{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));}
@@ -125,6 +131,11 @@
   <!-- AGENDA -->
   <section class="view show" id="vAgenda">
     <h2>Próximos agendamentos</h2>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <button class="btn" id="btnNovo" style="flex:1">+ Novo agendamento</button>
+      <button class="btn ghost" id="btnBloquear" style="flex:1">🔒 Bloquear</button>
+    </div>
+    <div id="resumoDia"></div>
     <div id="agendaList"><div class="empty">Carregando...</div></div>
     <button class="btn ghost" id="btnRefresh" style="margin-top:8px">Atualizar</button>
   </section>
@@ -157,6 +168,8 @@
       <div class="field"><label>Frase (tagline)</label><input id="cTag" type="text"></div>
       <div class="field"><label>Endereço</label><input id="cEnd" type="text"></div>
       <div class="field"><label>WhatsApp do salão (55+DDD+número)</label><input id="cZap" type="tel" inputmode="numeric"></div>
+      <div class="field"><label>Logo (link da imagem) — opcional</label><input id="cLogo" type="url" placeholder="https://..."></div>
+      <div class="field"><label>Instagram (@ ou link) — opcional</label><input id="cInsta" type="text" placeholder="@studiobella"></div>
       <button class="btn ok" id="btnSaveSalao">Salvar dados</button>
     </div>
 
@@ -200,7 +213,7 @@
 
 <div class="modal" id="editModal">
   <div class="modal-box">
-    <h3>Editar agendamento</h3>
+    <h3 id="modalTitle">Editar agendamento</h3>
     <div class="field"><label>Cliente</label><input id="eNome" type="text"></div>
     <div class="field"><label>WhatsApp da cliente</label><input id="eFone" type="tel" inputmode="numeric"></div>
     <div class="field"><label>Serviço</label><select id="eServ"></select></div>
@@ -212,6 +225,23 @@
     <div style="display:flex;gap:8px;margin-top:6px">
       <button class="btn ghost" id="eCancel" style="flex:1">Voltar</button>
       <button class="btn ok" id="eSave" style="flex:1">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="blockModal">
+  <div class="modal-box">
+    <h3>Bloquear folga / horário</h3>
+    <p class="note" style="margin-top:0;margin-bottom:14px">Nenhuma cliente consegue agendar no período bloqueado.</p>
+    <div class="field"><label>Dia</label><input id="bDia" type="date"></div>
+    <div class="field" id="bProfWrap"><label>Profissional</label><select id="bProf"></select></div>
+    <div class="field"><label>Início</label><select id="bIni"></select></div>
+    <div class="field"><label>Fim</label><select id="bFim"></select></div>
+    <div class="field"><label>Motivo</label><input id="bMotivo" type="text" placeholder="Ex: Folga, Almoço, Médico"></div>
+    <div class="err" id="bErr"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn ghost" id="bCancel" style="flex:1">Voltar</button>
+      <button class="btn ok" id="bSave" style="flex:1">Bloquear</button>
     </div>
   </div>
 </div>
@@ -237,6 +267,7 @@ const LOGIN_DOMINIO = "studiobella.app";
 // Valores iniciais (só usados na 1ª vez, depois a Lea edita tudo pelo painel):
 const DEFAULTS = {
   nomeSalao:"Studio Bella", tagline:"Beleza & cuidado", endereco:"", whatsapp:"5531989892315",
+  logoUrl:"", instagram:"",
   intervaloSlots:30, diasParaFrente:21,
   profissionais:["Patrícia","Ana"],
   horarios:{0:null,1:{abre:"09:00",fecha:"19:00"},2:{abre:"09:00",fecha:"19:00"},3:{abre:"09:00",fecha:"19:00"},4:{abre:"09:00",fecha:"19:00"},5:{abre:"09:00",fecha:"20:00"},6:{abre:"08:00",fecha:"17:00"}},
@@ -346,6 +377,17 @@ $("btnRefresh").onclick=carregarAgenda;
 
 function agCard(it,isDemo){
   if(!isDemo) agMap[it.id]=it;
+  // ----- BLOQUEIO -----
+  if(it.bloqueio){
+    const liberar = isDemo ? '<button class="mini del">Liberar</button>'
+      : '<button class="mini del" onclick="cancelar(\''+it.date+'\',\''+it.profPath+'\',\''+it.id+'\','+toMin(it.inicio)+','+it.duracao+')">Liberar</button>';
+    const fim = fmt(toMin(it.inicio)+it.duracao);
+    return '<div class="ag-card" style="border-left-color:#9b8a92;opacity:.95">'+
+      '<div class="ag-top"><div class="ag-chip" style="background:#ECE3E6;color:#6B5560"><b>'+it.inicio+'</b><span>até '+fim+'</span></div>'+
+        '<div class="ag-titlewrap"><div class="ag-title">🔒 '+esc(it.motivo||"Bloqueado")+'</div>'+(it.profissional?'<div class="ag-price">'+esc(it.profissional)+'</div>':'<div class="ag-price">Indisponível pra agendar</div>')+'</div></div>'+
+      '<div class="ag-actions" style="margin-top:12px">'+liberar+'</div></div>';
+  }
+  // ----- AGENDAMENTO NORMAL -----
   const foneDig=(it.fone||"").replace(/\D/g,"");
   const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
   const waBtn = wa ? '<button class="mini wa"'+(isDemo?'':' onclick="abrirWa(\''+wa+'\')"')+'>WhatsApp</button>' : '';
@@ -353,9 +395,13 @@ function agCard(it,isDemo){
     : '<button class="mini edit" onclick="abrirEdicao(\''+it.id+'\')">Editar</button>';
   const delBtn = isDemo ? '<button class="mini del">Cancelar</button>'
     : '<button class="mini del" onclick="cancelar(\''+it.date+'\',\''+it.profPath+'\',\''+it.id+'\','+toMin(it.inicio)+','+it.duracao+')">Cancelar</button>';
-  return '<div class="ag-card">'+
+  const feito = !!it.atendido;
+  const atBtn = isDemo ? '<button class="mini ok2">✓ Marcar como atendida</button>'
+    : '<button class="mini ok2'+(feito?' done':'')+'" onclick="marcarAtendida(\''+it.date+'\',\''+it.profPath+'\',\''+it.id+'\','+(feito?'false':'true')+')">'+(feito?'↩ Desfazer atendida':'✓ Marcar como atendida')+'</button>';
+  const badge = feito ? '<span class="ag-badge">✓ Atendida</span>' : '';
+  return '<div class="ag-card'+(feito?' atendida':'')+'">'+
     '<div class="ag-top"><div class="ag-chip"><b>'+it.inicio+'</b>'+(it.duracao?'<span>'+it.duracao+' min</span>':'')+'</div>'+
-      '<div class="ag-titlewrap"><div class="ag-title">'+esc(it.servico)+'</div>'+(it.preco?'<div class="ag-price">'+esc(it.preco)+'</div>':'')+'</div></div>'+
+      '<div class="ag-titlewrap"><div class="ag-title">'+esc(it.servico)+badge+'</div>'+(it.preco?'<div class="ag-price">'+esc(it.preco)+'</div>':'')+'</div></div>'+
     '<div class="ag-lines">'+
       '<div class="ag-line"><span class="ag-ic">👤</span><span><b>'+esc(it.cliente)+'</b></span></div>'+
       (it.fone?'<div class="ag-line"><span class="ag-ic">📞</span><span>'+esc(it.fone)+'</span></div>':'')+
@@ -363,7 +409,8 @@ function agCard(it,isDemo){
     '</div>'+
     (it.obs?'<div class="ag-obs"><b>O que ela quer</b>'+esc(it.obs)+'</div>':'')+
     (waBtn?'<div class="ag-actions" style="margin-bottom:8px">'+waBtn+'</div>':'')+
-    '<div class="ag-actions">'+editBtn+delBtn+'</div>'+
+    '<div class="ag-actions" style="margin-bottom:8px">'+editBtn+delBtn+'</div>'+
+    '<div class="ag-actions">'+atBtn+'</div>'+
   '</div>';
 }
 
@@ -379,6 +426,9 @@ function carregarAgenda(){
       });});
     });
     itens.sort((a,b)=> a.date===b.date ? a.inicio.localeCompare(b.inicio) : a.date.localeCompare(b.date));
+    // resumo do dia
+    const hojeCount=itens.filter(it=>it.date===hoje && !it.bloqueio).length;
+    $("resumoDia").innerHTML='<div class="resumo">'+(hojeCount>0?('📅 Hoje você tem <b>'+hojeCount+'</b> agendamento'+(hojeCount>1?'s':'')):'📅 Nenhum agendamento pra hoje')+'</div>';
     if(!itens.length){ box.innerHTML='<div class="empty">Nenhum agendamento futuro.<br>Os pedidos do site aparecem aqui. ✨</div>'; return; }
     let html="", curDate=""; agMap={};
     itens.forEach(it=>{
@@ -397,8 +447,8 @@ window.cancelar=(date,pk,id,start,dur)=>{
   Promise.all(tarefas).then(()=>{toast("Agendamento cancelado.");carregarAgenda();}).catch(()=>toast("Erro ao cancelar."));
 };
 
-/* ---------- EDITAR AGENDAMENTO ---------- */
-let editing=null;
+/* ---------- NOVO / EDITAR AGENDAMENTO ---------- */
+let editing=null, criando=false;
 function pkOf(prof){ if(!cfg.profissionais||!cfg.profissionais.length) return "geral"; return prof?sanitize(prof):"geral"; }
 // transação: só reserva se nenhum slot necessário estiver ocupado
 function reservarSlots(dk,pk,keys,bookingId){
@@ -409,26 +459,32 @@ function reservarSlots(dk,pk,keys,bookingId){
     return cur;
   }).then(r=>r.committed);
 }
+function fillServSelect(){ const sel=$("eServ"); sel.innerHTML=""; (cfg.servicos||[]).forEach((s,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=s.nome+" — "+s.preco+" ("+s.duracao+"min)"; sel.appendChild(o); }); }
+function fillProfSelect(){ const pw=$("eProfWrap"), pr=$("eProf"); if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML=""; cfg.profissionais.forEach(p=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; pr.appendChild(o); }); return true; } pw.style.display="none"; return false; }
+
+$("btnNovo").onclick=abrirNovo;
+function abrirNovo(){
+  criando=true; editing=null;
+  $("modalTitle").textContent="Novo agendamento";
+  $("eSave").textContent="Criar agendamento";
+  $("eErr").textContent=""; $("eNome").value=""; $("eFone").value=""; $("eObs").value="";
+  fillServSelect(); $("eServ").value=0;
+  const has=fillProfSelect(); if(has) $("eProf").value=cfg.profissionais[0];
+  $("eDia").value=todayKey(); $("eDia").min=todayKey();
+  preencherHoras();
+  $("editModal").classList.add("show");
+}
 
 window.abrirEdicao=id=>{
-  editing=agMap[id]; if(!editing) return;
+  editing=agMap[id]; if(!editing) return; criando=false;
+  $("modalTitle").textContent="Editar agendamento";
+  $("eSave").textContent="Salvar alterações";
   $("eErr").textContent="";
-  $("eNome").value=editing.cliente||"";
-  $("eFone").value=editing.fone||"";
-  $("eObs").value=editing.obs||"";
-  // serviços
-  const sv=$("eServ"); sv.innerHTML="";
-  (cfg.servicos||[]).forEach((s,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=s.nome+" — "+s.preco+" ("+s.duracao+"min)"; sv.appendChild(o); });
-  const si=(cfg.servicos||[]).findIndex(s=>s.nome===editing.servico); sv.value=si>=0?si:0;
-  // profissionais
-  const pw=$("eProfWrap"), pr=$("eProf");
-  if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML="";
-    cfg.profissionais.forEach(p=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; pr.appendChild(o); });
-    pr.value=editing.profissional||cfg.profissionais[0];
-  } else pw.style.display="none";
-  // dia
-  $("eDia").value=editing.date;
-  $("eDia").min=todayKey();
+  $("eNome").value=editing.cliente||""; $("eFone").value=editing.fone||""; $("eObs").value=editing.obs||"";
+  fillServSelect();
+  const si=(cfg.servicos||[]).findIndex(s=>s.nome===editing.servico); $("eServ").value=si>=0?si:0;
+  const has=fillProfSelect(); if(has) $("eProf").value=editing.profissional||cfg.profissionais[0];
+  $("eDia").value=editing.date; $("eDia").min=todayKey();
   preencherHoras(editing.inicio);
   $("editModal").classList.add("show");
 };
@@ -446,42 +502,96 @@ function preencherHoras(selecionado){
 $("eServ").addEventListener("change",()=>preencherHoras($("eHora").value));
 $("eDia").addEventListener("change",()=>preencherHoras());
 $("eCancel").onclick=()=>$("editModal").classList.remove("show");
-function fecharEdicao(){ $("editModal").classList.remove("show"); editing=null; }
+function fecharEdicao(){ $("editModal").classList.remove("show"); editing=null; criando=false; }
 
 $("eSave").onclick=async ()=>{
-  if(!editing) return;
   const nome=$("eNome").value.trim(); const fone=$("eFone").value.trim(); const obs=$("eObs").value.trim();
   const si=parseInt($("eServ").value)||0; const serv=cfg.servicos[si];
   const prof=(cfg.profissionais&&cfg.profissionais.length)?$("eProf").value:"";
   const dia=$("eDia").value; const hora=$("eHora").value;
+  if(!serv){ $("eErr").textContent="Cadastre um serviço primeiro (aba Serviços)."; return; }
   if(!nome){ $("eErr").textContent="Preencha o nome da cliente."; return; }
   if(!hora){ $("eErr").textContent="Escolha um horário (o salão pode estar fechado nesse dia)."; return; }
-
-  const oldDk=editing.date, oldPk=editing.profPath, id=editing.id;
-  const oldKeys=neededKeys(toMin(editing.inicio),editing.duracao);
-  const newDk=dia, newPk=pkOf(prof), newDur=serv.duracao, newKeys=neededKeys(toMin(hora),newDur);
-
-  $("eSave").disabled=true; $("eSave").textContent="Salvando...";
+  const newPk=pkOf(prof), newDur=serv.duracao, newKeys=neededKeys(toMin(hora),newDur);
+  const btn=$("eSave"); const orig=btn.textContent; btn.disabled=true; btn.textContent="Salvando...";
   try{
-    // 1) libera os horários antigos
-    await Promise.all(oldKeys.map(k=>db.ref("locks/"+oldDk+"/"+oldPk+"/"+k).remove()));
-    // 2) tenta reservar os novos
-    const ok=await reservarSlots(newDk,newPk,newKeys,id);
-    if(!ok){
-      // desfaz: devolve os horários antigos
-      const back={}; oldKeys.forEach(k=>back[k]=id);
-      await db.ref("locks/"+oldDk+"/"+oldPk).update(back);
-      $("eErr").textContent="Esse horário já está ocupado. Escolha outro.";
-      $("eSave").disabled=false; $("eSave").textContent="Salvar alterações"; return;
+    if(criando){
+      const id=db.ref().push().key;
+      const ok=await reservarSlots(dia,newPk,newKeys,id);
+      if(!ok){ $("eErr").textContent="Esse horário já está ocupado. Escolha outro."; btn.disabled=false; btn.textContent=orig; return; }
+      await db.ref("agendamentos/"+dia+"/"+newPk+"/"+id).set({ cliente:nome,fone:fone,servico:serv.nome,preco:serv.preco,profissional:prof,inicio:hora,duracao:newDur,obs:obs,criadoEm:Date.now() });
+      fecharEdicao(); toast("Agendamento criado!"); carregarAgenda();
+    } else {
+      const oldDk=editing.date, oldPk=editing.profPath, id=editing.id;
+      const oldKeys=neededKeys(toMin(editing.inicio),editing.duracao);
+      await Promise.all(oldKeys.map(k=>db.ref("locks/"+oldDk+"/"+oldPk+"/"+k).remove()));
+      const ok=await reservarSlots(dia,newPk,newKeys,id);
+      if(!ok){ const back={}; oldKeys.forEach(k=>back[k]=id); await db.ref("locks/"+oldDk+"/"+oldPk).update(back); $("eErr").textContent="Esse horário já está ocupado. Escolha outro."; btn.disabled=false; btn.textContent=orig; return; }
+      const novo={ cliente:nome,fone:fone,servico:serv.nome,preco:serv.preco,profissional:prof,inicio:hora,duracao:newDur,obs:obs,criadoEm:editing.criadoEm||Date.now(),editadoEm:Date.now(),atendido:editing.atendido||false };
+      if(!(oldDk===dia && oldPk===newPk)) await db.ref("agendamentos/"+oldDk+"/"+oldPk+"/"+id).remove();
+      await db.ref("agendamentos/"+dia+"/"+newPk+"/"+id).set(novo);
+      fecharEdicao(); toast("Agendamento atualizado!"); carregarAgenda();
     }
-    // 3) move/atualiza o registro
-    const novo={ cliente:nome, fone:fone, servico:serv.nome, preco:serv.preco, profissional:prof,
-                 inicio:hora, duracao:newDur, obs:obs, criadoEm:editing.criadoEm||Date.now(), editadoEm:Date.now() };
-    if(!(oldDk===newDk && oldPk===newPk)) await db.ref("agendamentos/"+oldDk+"/"+oldPk+"/"+id).remove();
-    await db.ref("agendamentos/"+newDk+"/"+newPk+"/"+id).set(novo);
-    fecharEdicao(); toast("Agendamento atualizado!"); carregarAgenda();
   }catch(e){ console.warn(e); $("eErr").textContent="Erro ao salvar. Tente de novo."; }
-  $("eSave").disabled=false; $("eSave").textContent="Salvar alterações";
+  btn.disabled=false; btn.textContent=orig;
+};
+
+/* ---------- MARCAR ATENDIDA ---------- */
+window.marcarAtendida=(date,pk,id,val)=>{
+  db.ref("agendamentos/"+date+"/"+pk+"/"+id+"/atendido").set(val).then(()=>{ toast(val?"Marcada como atendida ✓":"Desfeito."); carregarAgenda(); }).catch(()=>toast("Erro."));
+};
+
+/* ---------- BLOQUEAR FOLGA / HORÁRIO ---------- */
+$("btnBloquear").onclick=abrirBloqueio;
+function horasDoDia(v){
+  if(!v) return null; const [y,m,d]=v.split("-").map(Number); const dow=new Date(y,m-1,d).getDay();
+  const h=cfg.horarios[dow]; if(!h) return null; return {abre:toMin(h.abre),fecha:toMin(h.fecha)};
+}
+function preencherHorasBloqueio(){
+  const ini=$("bIni"), fim=$("bFim"); ini.innerHTML=""; fim.innerHTML="";
+  const hh=horasDoDia($("bDia").value);
+  if(!hh){ const o=document.createElement("option"); o.value=""; o.textContent="Fechado nesse dia"; ini.appendChild(o.cloneNode(true)); fim.appendChild(o); return; }
+  for(let t=hh.abre; t<hh.fecha; t+=cfg.intervaloSlots){ const o=document.createElement("option"); o.value=fmt(t); o.textContent=fmt(t); ini.appendChild(o); }
+  for(let t=hh.abre+cfg.intervaloSlots; t<=hh.fecha; t+=cfg.intervaloSlots){ const o=document.createElement("option"); o.value=fmt(t); o.textContent=fmt(t); fim.appendChild(o); }
+  fim.value=fmt(hh.fecha);
+}
+function abrirBloqueio(){
+  $("bErr").textContent=""; $("bMotivo").value="Folga";
+  $("bDia").value=todayKey(); $("bDia").min=todayKey();
+  const pw=$("bProfWrap"), pr=$("bProf");
+  if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML="";
+    const oAll=document.createElement("option"); oAll.value="__todas__"; oAll.textContent="Todas"; pr.appendChild(oAll);
+    cfg.profissionais.forEach(p=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; pr.appendChild(o); });
+  } else pw.style.display="none";
+  preencherHorasBloqueio();
+  $("blockModal").classList.add("show");
+}
+$("bDia").addEventListener("change",preencherHorasBloqueio);
+$("bCancel").onclick=()=>$("blockModal").classList.remove("show");
+$("bSave").onclick=async ()=>{
+  const dia=$("bDia").value; const motivo=$("bMotivo").value.trim()||"Bloqueado";
+  const iniV=$("bIni").value, fimV=$("bFim").value;
+  if(!iniV||!fimV){ $("bErr").textContent="Selecione início e fim (o salão pode estar fechado nesse dia)."; return; }
+  const ini=toMin(iniV), fim=toMin(fimV);
+  if(fim<=ini){ $("bErr").textContent="O fim tem que ser depois do início."; return; }
+  const dur=fim-ini; const keys=neededKeys(ini,dur);
+  let alvos;
+  if(cfg.profissionais&&cfg.profissionais.length){ const sel=$("bProf").value; alvos = sel==="__todas__" ? cfg.profissionais.slice() : [sel]; }
+  else alvos=[""];
+  const btn=$("bSave"); btn.disabled=true; btn.textContent="Bloqueando...";
+  let okCount=0, conflito=0;
+  try{
+    for(const alvo of alvos){
+      const pk=pkOf(alvo); const id=db.ref().push().key;
+      const ok=await reservarSlots(dia,pk,keys,id);
+      if(ok){ okCount++; await db.ref("agendamentos/"+dia+"/"+pk+"/"+id).set({ bloqueio:true, motivo:motivo, profissional:alvo||"", inicio:fmt(ini), duracao:dur, cliente:"", criadoEm:Date.now() }); }
+      else conflito++;
+    }
+    $("blockModal").classList.remove("show");
+    toast(okCount>0 ? ("Bloqueado!"+(conflito?" ("+conflito+" já tinha agendamento)":"")) : "Já há agendamento nesse horário.");
+    carregarAgenda();
+  }catch(e){ console.warn(e); $("bErr").textContent="Erro ao bloquear."; }
+  btn.disabled=false; btn.textContent="Bloquear";
 };
 
 /* ---------- SERVIÇOS ---------- */
@@ -534,10 +644,11 @@ $("btnSaveHr").onclick=()=>{
 };
 
 /* ---------- SALÃO ---------- */
-function preencherSalao(){ $("cNome").value=cfg.nomeSalao||""; $("cTag").value=cfg.tagline||""; $("cEnd").value=cfg.endereco||""; $("cZap").value=cfg.whatsapp||""; $("cLink").value=cfg.linkAgendamento||""; }
+function preencherSalao(){ $("cNome").value=cfg.nomeSalao||""; $("cTag").value=cfg.tagline||""; $("cEnd").value=cfg.endereco||""; $("cZap").value=cfg.whatsapp||""; $("cLink").value=cfg.linkAgendamento||""; $("cLogo").value=cfg.logoUrl||""; $("cInsta").value=cfg.instagram||""; }
 $("btnSaveSalao").onclick=()=>{
   cfg.nomeSalao=$("cNome").value.trim()||"Salão"; cfg.tagline=$("cTag").value.trim();
   cfg.endereco=$("cEnd").value.trim(); cfg.whatsapp=$("cZap").value.replace(/\D/g,"");
+  cfg.logoUrl=$("cLogo").value.trim(); cfg.instagram=$("cInsta").value.trim();
   aplicarTitulo(); salvarConfig("Dados salvos!");
 };
 $("btnSaveLink").onclick=()=>{ cfg.linkAgendamento=$("cLink").value.trim(); salvarConfig("Link salvo!"); };
