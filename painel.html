@@ -79,7 +79,10 @@
   .ag-card.atendida{opacity:.72;}
   .prof-card{padding:16px;}
   .pf-lbl{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;}
-  .pf-serv{font-size:13px;padding:7px 12px;}
+  .pf-serv{display:inline-block;font-size:13px;font-weight:500;padding:8px 14px;border-radius:99px;border:1.6px solid var(--line);color:var(--ink-soft);background:var(--surface);cursor:pointer;user-select:none;transition:background .15s,border-color .15s,color .15s;}
+  .pf-serv:active{transform:scale(.97);}
+  .pf-serv.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  .pf-serv.sel::before{content:"✓ ";}
   .modal{position:fixed;inset:0;z-index:80;background:rgba(46,26,36,.45);display:none;align-items:flex-end;justify-content:center;}
   .modal.show{display:flex;}
   .modal-box{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));}
@@ -402,6 +405,7 @@ function agCard(it,isDemo){
   const foneDig=(it.fone||"").replace(/\D/g,"");
   const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
   const waBtn = wa ? '<button class="mini wa"'+(isDemo?'':' onclick="confirmarWa(\''+it.id+'\')"')+'>WhatsApp</button>' : '';
+  const copBtn = isDemo ? '<button class="mini">📋 Copiar</button>' : '<button class="mini" onclick="copiarConfirma(\''+it.id+'\')">📋 Copiar</button>';
   const editBtn = isDemo ? '<button class="mini edit">Editar</button>'
     : '<button class="mini edit" onclick="abrirEdicao(\''+it.id+'\')">Editar</button>';
   const delBtn = isDemo ? '<button class="mini del">Cancelar</button>'
@@ -419,7 +423,7 @@ function agCard(it,isDemo){
       (it.profissional?'<div class="ag-line"><span class="ag-ic">✂️</span><span>'+esc(it.profissional)+'</span></div>':'')+
     '</div>'+
     (it.obs?'<div class="ag-obs"><b>O que ela quer</b>'+esc(it.obs)+'</div>':'')+
-    (waBtn?'<div class="ag-actions" style="margin-bottom:8px">'+waBtn+'</div>':'')+
+    '<div class="ag-actions" style="margin-bottom:8px">'+waBtn+copBtn+'</div>'+
     '<div class="ag-actions" style="margin-bottom:8px">'+editBtn+delBtn+'</div>'+
     '<div class="ag-actions">'+atBtn+'</div>'+
   '</div>';
@@ -451,10 +455,7 @@ function carregarAgenda(){
 }
 function esc(s){return String(s==null?"":s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
 window.abrirWa=fone=>window.open("https://wa.me/"+fone,"_blank");
-window.confirmarWa=id=>{
-  const it=agMap[id]; if(!it) return;
-  const foneDig=(it.fone||"").replace(/\D/g,""); const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
-  if(!wa){ toast("Essa cliente não tem telefone cadastrado."); return; }
+function msgConfirma(it){
   const primeiro = it.cliente ? it.cliente.trim().split(" ")[0] : "";
   let msg="Oi"+(primeiro?" "+primeiro:"")+"! 💕\n\n";
   msg+="Confirmando seu agendamento no "+cfg.nomeSalao+":\n\n";
@@ -463,7 +464,18 @@ window.confirmarWa=id=>{
   msg+="⏰ "+it.inicio+"\n";
   if(it.profissional) msg+="✂️ Com "+it.profissional+"\n";
   msg+="\nQualquer coisa é só me chamar. Te espero! ✨";
-  window.open("https://wa.me/"+wa+"?text="+encodeURIComponent(msg),"_blank");
+  return msg;
+}
+window.confirmarWa=id=>{
+  const it=agMap[id]; if(!it) return;
+  const foneDig=(it.fone||"").replace(/\D/g,""); const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
+  if(!wa){ toast("Essa cliente não tem telefone cadastrado."); return; }
+  window.open("https://wa.me/"+wa+"?text="+encodeURIComponent(msgConfirma(it)),"_blank");
+};
+window.copiarConfirma=id=>{
+  const it=agMap[id]; if(!it) return; const txt=msgConfirma(it);
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>toast("Confirmação copiada! ✅")).catch(()=>toast("Não consegui copiar.")); }
+  else toast("Copie manualmente.");
 };
 window.cancelar=(date,pk,id,start,dur)=>{
   if(!confirm("Cancelar este agendamento e liberar o horário?")) return;
@@ -713,6 +725,7 @@ function profCard(p,i){
   card.appendChild(top);
   // serviços (chips)
   const lblS=document.createElement("div"); lblS.className="pf-lbl"; lblS.textContent="Serviços que faz"; card.appendChild(lblS);
+  const hintS=document.createElement("div"); hintS.style.cssText="font-size:12px;color:var(--ink-soft);margin:-4px 0 9px"; hintS.textContent="Toque pra marcar os que ela faz (rosa = marcado)"; card.appendChild(hintS);
   const chips=document.createElement("div"); chips.className="pf-servs"; chips.style.cssText="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px";
   (cfg.servicos||[]).forEach(s=>{
     const c=document.createElement("div"); c.className="pf-serv pill"+(servsSel.indexOf(s.nome)>=0?" sel":""); c.dataset.serv=s.nome; c.textContent=s.nome;

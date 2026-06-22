@@ -119,7 +119,8 @@
   <div class="ico"></div><h2>Horário reservado!</h2>
   <p>Anote ou tire um print pra guardar 📸</p>
   <div id="doneDetails" class="resumo-card"></div>
-  <button class="btn" id="copiarResumo" style="margin-top:14px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);box-shadow:none">📋 Copiar resumo</button>
+  <button class="btn" id="meuWa" style="margin-top:14px;background:#25D366;box-shadow:none">📲 Receber no meu WhatsApp</button>
+  <button class="btn" id="copiarResumo" style="margin-top:10px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);box-shadow:none">📋 Copiar resumo</button>
   <button class="btn" id="addCal" style="margin-top:10px;background:var(--accent);box-shadow:none">📅 Adicionar à minha agenda</button>
   <button class="btn again" id="againBtn">Fazer outro agendamento</button>
 </div>
@@ -367,8 +368,8 @@ $("confirm").onclick=async ()=>{
   msg+="\nHorário reservado pelo site. ✅";
   window.open("https://wa.me/"+CONFIG.whatsapp+"?text="+encodeURIComponent(msg),"_blank");
 
-  // guarda os dados pro botão "Adicionar à agenda"
-  ultimoAgendamento={ data:new Date(state.data), hora:state.hora, dur:dur, servico:state.servico.nome, prof:state.prof||"" };
+  // guarda os dados pro botão "Adicionar à agenda" e "Receber no meu WhatsApp"
+  ultimoAgendamento={ data:new Date(state.data), hora:state.hora, dur:dur, servico:state.servico.nome, prof:state.prof||"", fone:(fone||"").replace(/\D/g,"") };
 
   // monta o resumo que a cliente vê
   const escH=s=>String(s==null?"":s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
@@ -391,6 +392,13 @@ $("copiarResumo").onclick=()=>{
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(resumoTexto).then(()=>toast("Resumo copiado! ✅")).catch(()=>toast("Não consegui copiar."));
   }else{ toast("Tire um print pra guardar 📸"); }
+};
+$("meuWa").onclick=()=>{
+  if(!ultimoAgendamento) return;
+  const dig=(ultimoAgendamento.fone||"").replace(/\D/g,"");
+  const wa = dig.length>=10 ? (dig.length<=11?"55"+dig:dig) : "";
+  if(!wa){ toast("Telefone não reconhecido."); return; }
+  window.open("https://wa.me/"+wa+"?text="+encodeURIComponent(resumoTexto),"_blank");
 };
 
 /* ---------- Adicionar à agenda do celular (.ics) ---------- */
