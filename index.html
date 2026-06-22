@@ -210,6 +210,11 @@ function fmt(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(
 function slotKey(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,"0")+String(m).padStart(2,"0");}
 function neededKeys(start,dur){const iv=CONFIG.intervaloSlots,k=[];for(let s=start;s<start+dur;s+=iv)k.push(slotKey(s));return k;}
 function dataExtenso(d){return DOW[d.getDay()]+", "+d.getDate()+" de "+MON[d.getMonth()];}
+// --- Profissionais (suporta texto antigo e objeto novo) ---
+function profNome(p){ return typeof p==="string" ? p : ((p&&p.nome)||""); }
+function acharProf(nome){ return (CONFIG.profissionais||[]).find(p=>profNome(p)===nome); }
+function profDoServico(p, servicoNome){ if(typeof p!=="object"||!p) return true; if(!Array.isArray(p.servicos)||!p.servicos.length) return true; return p.servicos.indexOf(servicoNome)>=0; }
+function profHorariosDe(nome){ const p=acharProf(nome); if(p&&typeof p==="object"&&p.horarios) return p.horarios; return CONFIG.horarios; }
 
 function montarHeader(){
   const p=CONFIG.nomeSalao.trim().split(" ");
@@ -230,7 +235,7 @@ function montarServicos(){
     const c=document.createElement("div"); c.className="card";
     c.innerHTML='<div><div class="name">'+s.nome+'</div><div class="meta">'+s.duracao+' min</div></div>'+
       '<div style="display:flex;align-items:center;gap:12px"><div class="price">'+s.preco+'</div><div class="check"></div></div>';
-    c.onclick=()=>{ state.servico=s; [...servEl.children].forEach(x=>x.classList.remove("sel")); c.classList.add("sel"); state.hora=null; buildTimes(); update(); };
+    c.onclick=()=>{ state.servico=s; [...servEl.children].forEach(x=>x.classList.remove("sel")); c.classList.add("sel"); state.prof=null; state.data=null; state.hora=null; montarProfissionais(); montarDatas(); buildTimes(); update(); };
     servEl.appendChild(c);
   });
 }
@@ -239,9 +244,12 @@ function montarProfissionais(){
   const profStep=$("profStep"), prosEl=$("pros"); prosEl.innerHTML="";
   if(CONFIG.profissionais&&CONFIG.profissionais.length){
     profStep.style.display="";
-    CONFIG.profissionais.forEach(p=>{
-      const b=document.createElement("div"); b.className="pill"; b.textContent=p;
-      b.onclick=()=>{ state.prof=p; state.hora=null; [...prosEl.children].forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); refreshTimes(); update(); };
+    const lista=CONFIG.profissionais.filter(p=> !state.servico || profDoServico(p, state.servico.nome));
+    if(!lista.length){ const e=document.createElement("div"); e.className="empty-slots"; e.style.display="block"; e.textContent="Nenhuma profissional faz esse serviço ainda."; prosEl.appendChild(e); return; }
+    lista.forEach(p=>{
+      const nm=profNome(p);
+      const b=document.createElement("div"); b.className="pill"; b.textContent=nm;
+      b.onclick=()=>{ state.prof=nm; state.data=null; state.hora=null; [...prosEl.children].forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); montarDatas(); refreshTimes(); update(); };
       prosEl.appendChild(b);
     });
   }else{
@@ -252,13 +260,14 @@ function montarProfissionais(){
 
 function montarDatas(){
   const datesEl=$("dates"); datesEl.innerHTML="";
+  const horarios = state.prof ? profHorariosDe(state.prof) : CONFIG.horarios;
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   for(let i=0;i<CONFIG.diasParaFrente;i++){
     const d=new Date(hoje); d.setDate(hoje.getDate()+i);
-    const cfg=CONFIG.horarios[d.getDay()];
-    const el=document.createElement("div"); el.className="date"+(cfg?"":" off");
+    const cfgH=horarios[d.getDay()];
+    const el=document.createElement("div"); el.className="date"+(cfgH?"":" off");
     el.innerHTML='<div class="dow">'+DOW[d.getDay()]+'</div><div class="dnum">'+d.getDate()+'</div><div class="mon">'+MON[d.getMonth()]+'</div>';
-    if(cfg){ el.onclick=()=>{ state.data=d; state.hora=null; [...datesEl.children].forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); refreshTimes(); update(); }; }
+    if(cfgH){ el.onclick=()=>{ state.data=d; state.hora=null; [...datesEl.children].forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); refreshTimes(); update(); }; }
     datesEl.appendChild(el);
   }
 }
@@ -278,8 +287,9 @@ function buildTimes(){
   const precisaProf=CONFIG.profissionais&&CONFIG.profissionais.length;
   if(precisaProf&&!state.prof){ H.style.display="block"; H.textContent="Escolha o profissional primeiro."; return; }
   if(!state.data){ H.style.display="block"; H.textContent="Selecione um dia para ver os horários."; return; }
-  const cfg=CONFIG.horarios[state.data.getDay()];
-  if(!cfg){ H.style.display="block"; H.textContent="Fechado neste dia."; return; }
+  const horarios = state.prof ? profHorariosDe(state.prof) : CONFIG.horarios;
+  const cfg=horarios[state.data.getDay()];
+  if(!cfg){ H.style.display="block"; H.textContent="Não atende neste dia."; return; }
   const dur=state.servico?state.servico.duracao:CONFIG.intervaloSlots;
   const abre=toMin(cfg.abre), fecha=toMin(cfg.fecha);
   const agora=new Date(), ehHoje=state.data.toDateString()===agora.toDateString(), minAgora=agora.getHours()*60+agora.getMinutes();

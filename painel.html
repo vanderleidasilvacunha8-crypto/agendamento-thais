@@ -77,6 +77,9 @@
   .resumo b{font-weight:700;}
   .ag-badge{display:inline-block;background:var(--ok);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;letter-spacing:.3px;}
   .ag-card.atendida{opacity:.72;}
+  .prof-card{padding:16px;}
+  .pf-lbl{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;}
+  .pf-serv{font-size:13px;padding:7px 12px;}
   .modal{position:fixed;inset:0;z-index:80;background:rgba(46,26,36,.45);display:none;align-items:flex-end;justify-content:center;}
   .modal.show{display:flex;}
   .modal-box{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));}
@@ -300,6 +303,14 @@ function fmt(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(
 function todayKey(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function extenso(key){const[y,m,d]=key.split("-").map(Number);const dt=new Date(y,m-1,d);return DOWLONG[dt.getDay()]+", "+d+" de "+MON[m-1];}
 let agMap={};
+// --- Profissionais (suporta formato antigo "texto" e novo objeto) ---
+function profNome(p){ return typeof p==="string" ? p : ((p&&p.nome)||""); }
+function profServicosDe(p){ // nomes dos serviços que a profissional faz (vazio/antigo = todos)
+  if(p && typeof p==="object" && Array.isArray(p.servicos) && p.servicos.length) return p.servicos;
+  return (cfg.servicos||[]).map(s=>s.nome);
+}
+function profHorariosDe(p){ if(p && typeof p==="object" && p.horarios) return p.horarios; return cfg.horarios; }
+function acharProf(nome){ return (cfg.profissionais||[]).find(p=>profNome(p)===nome); }
 
 /* ---------- LOGIN ---------- */
 $("btnEntrar").onclick=()=>{
@@ -390,7 +401,7 @@ function agCard(it,isDemo){
   // ----- AGENDAMENTO NORMAL -----
   const foneDig=(it.fone||"").replace(/\D/g,"");
   const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
-  const waBtn = wa ? '<button class="mini wa"'+(isDemo?'':' onclick="abrirWa(\''+wa+'\')"')+'>WhatsApp</button>' : '';
+  const waBtn = wa ? '<button class="mini wa"'+(isDemo?'':' onclick="confirmarWa(\''+it.id+'\')"')+'>WhatsApp</button>' : '';
   const editBtn = isDemo ? '<button class="mini edit">Editar</button>'
     : '<button class="mini edit" onclick="abrirEdicao(\''+it.id+'\')">Editar</button>';
   const delBtn = isDemo ? '<button class="mini del">Cancelar</button>'
@@ -440,6 +451,20 @@ function carregarAgenda(){
 }
 function esc(s){return String(s==null?"":s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
 window.abrirWa=fone=>window.open("https://wa.me/"+fone,"_blank");
+window.confirmarWa=id=>{
+  const it=agMap[id]; if(!it) return;
+  const foneDig=(it.fone||"").replace(/\D/g,""); const wa=foneDig.length>=10?(foneDig.length<=11?"55"+foneDig:foneDig):"";
+  if(!wa){ toast("Essa cliente não tem telefone cadastrado."); return; }
+  const primeiro = it.cliente ? it.cliente.trim().split(" ")[0] : "";
+  let msg="Oi"+(primeiro?" "+primeiro:"")+"! 💕\n\n";
+  msg+="Confirmando seu agendamento no "+cfg.nomeSalao+":\n\n";
+  msg+="💇 "+it.servico+(it.preco?" ("+it.preco+")":"")+"\n";
+  msg+="📅 "+extenso(it.date)+"\n";
+  msg+="⏰ "+it.inicio+"\n";
+  if(it.profissional) msg+="✂️ Com "+it.profissional+"\n";
+  msg+="\nQualquer coisa é só me chamar. Te espero! ✨";
+  window.open("https://wa.me/"+wa+"?text="+encodeURIComponent(msg),"_blank");
+};
 window.cancelar=(date,pk,id,start,dur)=>{
   if(!confirm("Cancelar este agendamento e liberar o horário?")) return;
   const tarefas=[db.ref("agendamentos/"+date+"/"+pk+"/"+id).remove()];
@@ -459,8 +484,14 @@ function reservarSlots(dk,pk,keys,bookingId){
     return cur;
   }).then(r=>r.committed);
 }
-function fillServSelect(){ const sel=$("eServ"); sel.innerHTML=""; (cfg.servicos||[]).forEach((s,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=s.nome+" — "+s.preco+" ("+s.duracao+"min)"; sel.appendChild(o); }); }
-function fillProfSelect(){ const pw=$("eProfWrap"), pr=$("eProf"); if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML=""; cfg.profissionais.forEach(p=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; pr.appendChild(o); }); return true; } pw.style.display="none"; return false; }
+function fillServSelect(filtrar){
+  const sel=$("eServ"); sel.innerHTML="";
+  let permitidos=(cfg.servicos||[]).map(s=>s.nome);
+  if(filtrar && cfg.profissionais && cfg.profissionais.length){ permitidos=profServicosDe(acharProf($("eProf").value)); }
+  (cfg.servicos||[]).forEach((s,i)=>{ if(permitidos.indexOf(s.nome)<0) return; const o=document.createElement("option"); o.value=i; o.textContent=s.nome+" — "+s.preco+" ("+s.duracao+"min)"; sel.appendChild(o); });
+  if(!sel.options.length){ const o=document.createElement("option"); o.value=""; o.textContent="(sem serviço pra essa profissional)"; sel.appendChild(o); }
+}
+function fillProfSelect(){ const pw=$("eProfWrap"), pr=$("eProf"); if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML=""; cfg.profissionais.forEach(p=>{ const nm=profNome(p); const o=document.createElement("option"); o.value=nm; o.textContent=nm; pr.appendChild(o); }); return true; } pw.style.display="none"; return false; }
 
 $("btnNovo").onclick=abrirNovo;
 function abrirNovo(){
@@ -468,8 +499,8 @@ function abrirNovo(){
   $("modalTitle").textContent="Novo agendamento";
   $("eSave").textContent="Criar agendamento";
   $("eErr").textContent=""; $("eNome").value=""; $("eFone").value=""; $("eObs").value="";
-  fillServSelect(); $("eServ").value=0;
-  const has=fillProfSelect(); if(has) $("eProf").value=cfg.profissionais[0];
+  const has=fillProfSelect(); if(has) $("eProf").value=profNome(cfg.profissionais[0]);
+  fillServSelect(true); $("eServ").selectedIndex=0;
   $("eDia").value=todayKey(); $("eDia").min=todayKey();
   preencherHoras();
   $("editModal").classList.add("show");
@@ -481,9 +512,9 @@ window.abrirEdicao=id=>{
   $("eSave").textContent="Salvar alterações";
   $("eErr").textContent="";
   $("eNome").value=editing.cliente||""; $("eFone").value=editing.fone||""; $("eObs").value=editing.obs||"";
-  fillServSelect();
-  const si=(cfg.servicos||[]).findIndex(s=>s.nome===editing.servico); $("eServ").value=si>=0?si:0;
-  const has=fillProfSelect(); if(has) $("eProf").value=editing.profissional||cfg.profissionais[0];
+  const has=fillProfSelect(); if(has) $("eProf").value=editing.profissional||profNome(cfg.profissionais[0]);
+  fillServSelect(false);
+  const si=(cfg.servicos||[]).findIndex(s=>s.nome===editing.servico); $("eServ").value=si>=0?si:($("eServ").options.length?$("eServ").options[0].value:"");
   $("eDia").value=editing.date; $("eDia").min=todayKey();
   preencherHoras(editing.inicio);
   $("editModal").classList.add("show");
@@ -492,8 +523,10 @@ function preencherHoras(selecionado){
   const hs=$("eHora"); hs.innerHTML="";
   const v=$("eDia").value; if(!v){ return; }
   const [y,m,d]=v.split("-").map(Number); const dow=new Date(y,m-1,d).getDay();
-  const cfgH=cfg.horarios[dow];
-  if(!cfgH){ const o=document.createElement("option"); o.textContent="Fechado nesse dia"; o.value=""; hs.appendChild(o); return; }
+  const profSel=(cfg.profissionais&&cfg.profissionais.length)?$("eProf").value:null;
+  const horarios = profSel ? profHorariosDe(acharProf(profSel)) : cfg.horarios;
+  const cfgH=horarios[dow];
+  if(!cfgH){ const o=document.createElement("option"); o.textContent="Não atende nesse dia"; o.value=""; hs.appendChild(o); return; }
   const si=parseInt($("eServ").value)||0; const dur=(cfg.servicos[si]||{}).duracao||cfg.intervaloSlots;
   const abre=toMin(cfgH.abre), fecha=toMin(cfgH.fecha);
   for(let t=abre; t+dur<=fecha; t+=cfg.intervaloSlots){ const o=document.createElement("option"); o.value=fmt(t); o.textContent=fmt(t); hs.appendChild(o); }
@@ -501,6 +534,7 @@ function preencherHoras(selecionado){
 }
 $("eServ").addEventListener("change",()=>preencherHoras($("eHora").value));
 $("eDia").addEventListener("change",()=>preencherHoras());
+$("eProf").addEventListener("change",()=>{ fillServSelect(criando); preencherHoras(); });
 $("eCancel").onclick=()=>$("editModal").classList.remove("show");
 function fecharEdicao(){ $("editModal").classList.remove("show"); editing=null; criando=false; }
 
@@ -561,7 +595,7 @@ function abrirBloqueio(){
   const pw=$("bProfWrap"), pr=$("bProf");
   if(cfg.profissionais&&cfg.profissionais.length){ pw.style.display=""; pr.innerHTML="";
     const oAll=document.createElement("option"); oAll.value="__todas__"; oAll.textContent="Todas"; pr.appendChild(oAll);
-    cfg.profissionais.forEach(p=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; pr.appendChild(o); });
+    cfg.profissionais.forEach(p=>{ const nm=profNome(p); const o=document.createElement("option"); o.value=nm; o.textContent=nm; pr.appendChild(o); });
   } else pw.style.display="none";
   preencherHorasBloqueio();
   $("blockModal").classList.add("show");
@@ -576,7 +610,7 @@ $("bSave").onclick=async ()=>{
   if(fim<=ini){ $("bErr").textContent="O fim tem que ser depois do início."; return; }
   const dur=fim-ini; const keys=neededKeys(ini,dur);
   let alvos;
-  if(cfg.profissionais&&cfg.profissionais.length){ const sel=$("bProf").value; alvos = sel==="__todas__" ? cfg.profissionais.slice() : [sel]; }
+  if(cfg.profissionais&&cfg.profissionais.length){ const sel=$("bProf").value; alvos = sel==="__todas__" ? cfg.profissionais.map(profNome) : [sel]; }
   else alvos=[""];
   const btn=$("bSave"); btn.disabled=true; btn.textContent="Bloqueando...";
   let okCount=0, conflito=0;
@@ -665,16 +699,56 @@ $("btnCopiarLink").onclick=()=>{
 /* ---------- PROFISSIONAIS ---------- */
 function renderProf(){
   const box=$("profList"); box.innerHTML="";
-  (cfg.profissionais||[]).forEach((p,i)=>{
-    const r=document.createElement("div"); r.className="srv-row"; r.style.gridTemplateColumns="1fr 34px";
-    r.innerHTML='<input value="'+esc(p)+'" placeholder="Nome"><button class="x">×</button>';
-    r.querySelector(".x").onclick=()=>{ cfg.profissionais.splice(i,1); renderProf(); };
-    box.appendChild(r);
-  });
+  (cfg.profissionais||[]).forEach((p,i)=> box.appendChild(profCard(p,i)));
 }
-$("btnAddProf").onclick=()=>{ cfg.profissionais.push(""); renderProf(); };
+function profCard(p,i){
+  const nome=profNome(p);
+  const servsSel = (p && typeof p==="object" && Array.isArray(p.servicos)) ? p.servicos : (cfg.servicos||[]).map(s=>s.nome);
+  const hor = profHorariosDe(p);
+  const card=document.createElement("div"); card.className="card prof-card";
+  // nome + remover
+  const top=document.createElement("div"); top.style.cssText="display:flex;gap:8px;align-items:center;margin-bottom:12px";
+  top.innerHTML='<input class="pf-nome" value="'+esc(nome)+'" placeholder="Nome" style="margin:0"><button class="x">×</button>';
+  top.querySelector(".x").onclick=()=>{ cfg.profissionais.splice(i,1); renderProf(); };
+  card.appendChild(top);
+  // serviços (chips)
+  const lblS=document.createElement("div"); lblS.className="pf-lbl"; lblS.textContent="Serviços que faz"; card.appendChild(lblS);
+  const chips=document.createElement("div"); chips.className="pf-servs"; chips.style.cssText="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px";
+  (cfg.servicos||[]).forEach(s=>{
+    const c=document.createElement("div"); c.className="pf-serv pill"+(servsSel.indexOf(s.nome)>=0?" sel":""); c.dataset.serv=s.nome; c.textContent=s.nome;
+    c.onclick=()=>c.classList.toggle("sel"); chips.appendChild(c);
+  });
+  card.appendChild(chips);
+  // dias e horários
+  const lblH=document.createElement("div"); lblH.className="pf-lbl"; lblH.textContent="Dias e horários que atende"; card.appendChild(lblH);
+  for(let d=0;d<7;d++){
+    const h=hor[d]; const aberto=!!h;
+    const row=document.createElement("div"); row.className="hr-row pf-day"; row.dataset.dow=d;
+    row.innerHTML='<div class="dn">'+DOW[d]+'</div>'+
+      '<div class="sw'+(aberto?" on":"")+'"></div>'+
+      '<input type="time" value="'+(aberto?h.abre:"09:00")+'" '+(aberto?"":"disabled")+'>'+
+      '<span style="color:var(--ink-soft)">às</span>'+
+      '<input type="time" value="'+(aberto?h.fecha:"18:00")+'" '+(aberto?"":"disabled")+'>';
+    const sw=row.querySelector(".sw"); const ins=row.querySelectorAll("input");
+    sw.onclick=()=>{ const on=sw.classList.toggle("on"); ins.forEach(x=>x.disabled=!on); };
+    card.appendChild(row);
+  }
+  return card;
+}
+$("btnAddProf").onclick=()=>{ cfg.profissionais.push({nome:"",servicos:(cfg.servicos||[]).map(s=>s.nome),horarios:JSON.parse(JSON.stringify(cfg.horarios))}); renderProf(); };
 $("btnSaveProf").onclick=()=>{
-  cfg.profissionais=[...$("profList").querySelectorAll("input")].map(i=>i.value.trim()).filter(Boolean);
+  const cards=[...$("profList").querySelectorAll(".prof-card")];
+  cfg.profissionais = cards.map(card=>{
+    const nome=card.querySelector(".pf-nome").value.trim();
+    const servicos=[...card.querySelectorAll(".pf-serv.sel")].map(c=>c.dataset.serv);
+    const horarios={};
+    card.querySelectorAll(".pf-day").forEach(row=>{
+      const dow=+row.dataset.dow; const on=row.querySelector(".sw").classList.contains("on");
+      const ins=row.querySelectorAll("input[type=time]");
+      horarios[dow]= on ? {abre:ins[0].value,fecha:ins[1].value} : null;
+    });
+    return {nome,servicos,horarios};
+  }).filter(p=>p.nome);
   renderProf(); salvarConfig("Profissionais salvos!");
 };
 
