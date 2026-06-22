@@ -79,6 +79,9 @@
   .ag-card.atendida{opacity:.72;}
   .prof-card{padding:16px;}
   .pf-lbl{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;}
+  .filtros{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+  .filtros select,.filtros input{flex:1 1 130px;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:13.5px;color:var(--ink);font-family:inherit;}
+  .filtros #fLimpar{flex-basis:100%;padding:8px;font-size:13px;margin-top:2px;}
   .pf-serv{display:inline-block;font-size:13px;font-weight:500;padding:8px 14px;border-radius:99px;border:1.6px solid var(--line);color:var(--ink-soft);background:var(--surface);cursor:pointer;user-select:none;transition:background .15s,border-color .15s,color .15s;}
   .pf-serv:active{transform:scale(.97);}
   .pf-serv.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
@@ -142,6 +145,13 @@
       <button class="btn ghost" id="btnBloquear" style="flex:1">🔒 Bloquear</button>
     </div>
     <div id="resumoDia"></div>
+    <div class="filtros">
+      <select id="fProf"><option value="">Todas as profissionais</option></select>
+      <select id="fServ"><option value="">Todos os serviços</option></select>
+      <input type="date" id="fData" title="Filtrar por dia">
+      <select id="fOrd"><option value="prox">Mais próximos</option><option value="rec">Recém-marcados</option></select>
+      <button class="btn ghost" id="fLimpar" type="button">Limpar filtros</button>
+    </div>
     <div id="agendaList"><div class="empty">Carregando...</div></div>
     <button class="btn ghost" id="btnRefresh" style="margin-top:8px">Atualizar</button>
   </section>
@@ -194,6 +204,12 @@
       <div id="profList"></div>
       <button class="btn ghost" id="btnAddProf" style="margin:6px 0 12px">+ Adicionar profissional</button>
       <button class="btn ok" id="btnSaveProf">Salvar profissionais</button>
+    </div>
+
+    <h2 style="margin-top:22px">Agenda dos profissionais</h2>
+    <div class="card">
+      <p class="note" style="margin-top:0">Gere a agenda de cada profissional pra copiar ou enviar no WhatsApp dela — assim ela sabe os dias e horários que tem atendimento.</p>
+      <button class="btn ok" id="btnRelatorio">📋 Gerar agenda pra enviar</button>
     </div>
 
     <h2 style="margin-top:22px">Backup</h2>
@@ -249,6 +265,25 @@
       <button class="btn ghost" id="bCancel" style="flex:1">Voltar</button>
       <button class="btn ok" id="bSave" style="flex:1">Bloquear</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="relatModal">
+  <div class="modal-box">
+    <h3>Agenda da profissional</h3>
+    <div class="field"><label>Profissional</label><select id="rProf"></select></div>
+    <div class="field"><label>Período</label><select id="rPeriodo">
+      <option value="hoje">Só hoje</option>
+      <option value="7">Próximos 7 dias</option>
+      <option value="todos" selected>Todos os próximos</option>
+    </select></div>
+    <div class="field"><label>Prévia (você pode editar antes de enviar)</label><textarea id="rTexto" rows="9" style="width:100%;font-family:inherit;font-size:13.5px;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);resize:vertical"></textarea></div>
+    <div class="err" id="rErr"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn ghost" id="rCopiar" style="flex:1">📋 Copiar</button>
+      <button class="btn ok" id="rEnviar" style="flex:1">📲 Enviar no WhatsApp</button>
+    </div>
+    <button class="btn ghost" id="rFechar" style="margin-top:8px">Fechar</button>
   </div>
 </div>
 
@@ -429,6 +464,7 @@ function agCard(it,isDemo){
   '</div>';
 }
 
+let todosItens=[];
 function carregarAgenda(){
   const box=$("agendaList");
   if(demo){ box.innerHTML=demoAgendaHTML(); return; }
@@ -440,19 +476,42 @@ function carregarAgenda(){
         itens.push(Object.assign({date,profPath:pk,id},val[date][pk][id]));
       });});
     });
-    itens.sort((a,b)=> a.date===b.date ? a.inicio.localeCompare(b.inicio) : a.date.localeCompare(b.date));
-    // resumo do dia
+    todosItens=itens;
     const hojeCount=itens.filter(it=>it.date===hoje && !it.bloqueio).length;
     $("resumoDia").innerHTML='<div class="resumo">'+(hojeCount>0?('📅 Hoje você tem <b>'+hojeCount+'</b> agendamento'+(hojeCount>1?'s':'')):'📅 Nenhum agendamento pra hoje')+'</div>';
-    if(!itens.length){ box.innerHTML='<div class="empty">Nenhum agendamento futuro.<br>Os pedidos do site aparecem aqui. ✨</div>'; return; }
-    let html="", curDate=""; agMap={};
-    itens.forEach(it=>{
-      if(it.date!==curDate){ curDate=it.date; html+='<div class="daygroup">'+extenso(it.date)+'</div>'; }
-      html+=agCard(it,false);
-    });
-    box.innerHTML=html;
+    popularFiltros();
+    renderAgenda();
   }).catch(()=>{ box.innerHTML='<div class="empty">Erro ao carregar.</div>'; });
 }
+function popularFiltros(){
+  const fp=$("fProf"); if(fp){ const atual=fp.value; const temP=cfg.profissionais&&cfg.profissionais.length;
+    fp.innerHTML='<option value="">Todas as profissionais</option>'+(temP?cfg.profissionais.map(p=>{const n=profNome(p);return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join(""):"");
+    fp.value=atual; fp.style.display=temP?"":"none"; }
+  const fsv=$("fServ"); if(fsv){ const atual=fsv.value;
+    fsv.innerHTML='<option value="">Todos os serviços</option>'+(cfg.servicos||[]).map(s=>'<option value="'+esc(s.nome)+'">'+esc(s.nome)+'</option>').join("");
+    fsv.value=atual; }
+}
+function renderAgenda(){
+  const box=$("agendaList");
+  const fProf=$("fProf")?$("fProf").value:"", fServ=$("fServ")?$("fServ").value:"";
+  const fData=$("fData")?$("fData").value:"", fOrd=$("fOrd")?$("fOrd").value:"prox";
+  let itens=todosItens.slice();
+  if(fProf) itens=itens.filter(it=>it.profissional===fProf);
+  if(fServ) itens=itens.filter(it=>it.servico===fServ);
+  if(fData) itens=itens.filter(it=>it.date===fData);
+  if(fOrd==="rec") itens.sort((a,b)=>(b.criadoEm||0)-(a.criadoEm||0));
+  else itens.sort((a,b)=> a.date===b.date ? (a.inicio||"").localeCompare(b.inicio||"") : a.date.localeCompare(b.date));
+  agMap={};
+  if(!itens.length){ box.innerHTML='<div class="empty">'+(todosItens.length?'Nenhum agendamento com esse filtro.':'Nenhum agendamento futuro.<br>Os pedidos do site aparecem aqui. ✨')+'</div>'; return; }
+  let html="", curDate="";
+  itens.forEach(it=>{
+    if(it.date!==curDate){ curDate=it.date; html+='<div class="daygroup">'+extenso(it.date)+'</div>'; }
+    html+=agCard(it,false);
+  });
+  box.innerHTML=html;
+}
+["fProf","fServ","fData","fOrd"].forEach(id=>{ const el=$(id); if(el) el.addEventListener("change",renderAgenda); });
+$("fLimpar").onclick=()=>{ ["fProf","fServ","fData"].forEach(id=>{const e=$(id);if(e)e.value="";}); const o=$("fOrd"); if(o)o.value="prox"; renderAgenda(); };
 function esc(s){return String(s==null?"":s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));}
 window.abrirWa=fone=>window.open("https://wa.me/"+fone,"_blank");
 function msgConfirma(it){
@@ -723,6 +782,10 @@ function profCard(p,i){
   top.innerHTML='<input class="pf-nome" value="'+esc(nome)+'" placeholder="Nome" style="margin:0"><button class="x">×</button>';
   top.querySelector(".x").onclick=()=>{ cfg.profissionais.splice(i,1); renderProf(); };
   card.appendChild(top);
+  // whatsapp da profissional
+  const foneWrap=document.createElement("div"); foneWrap.style.marginBottom="14px";
+  foneWrap.innerHTML='<div class="pf-lbl">WhatsApp dela (pra receber a agenda)</div><input class="pf-fone" type="tel" inputmode="numeric" value="'+esc((p&&p.fone)||"")+'" placeholder="(31) 9 9999-9999" style="margin:0">';
+  card.appendChild(foneWrap);
   // serviços (chips)
   const lblS=document.createElement("div"); lblS.className="pf-lbl"; lblS.textContent="Serviços que faz"; card.appendChild(lblS);
   const hintS=document.createElement("div"); hintS.style.cssText="font-size:12px;color:var(--ink-soft);margin:-4px 0 9px"; hintS.textContent="Toque pra marcar os que ela faz (rosa = marcado)"; card.appendChild(hintS);
@@ -748,11 +811,12 @@ function profCard(p,i){
   }
   return card;
 }
-$("btnAddProf").onclick=()=>{ cfg.profissionais.push({nome:"",servicos:(cfg.servicos||[]).map(s=>s.nome),horarios:JSON.parse(JSON.stringify(cfg.horarios))}); renderProf(); };
+$("btnAddProf").onclick=()=>{ cfg.profissionais.push({nome:"",fone:"",servicos:(cfg.servicos||[]).map(s=>s.nome),horarios:JSON.parse(JSON.stringify(cfg.horarios))}); renderProf(); };
 $("btnSaveProf").onclick=()=>{
   const cards=[...$("profList").querySelectorAll(".prof-card")];
   cfg.profissionais = cards.map(card=>{
     const nome=card.querySelector(".pf-nome").value.trim();
+    const fone=card.querySelector(".pf-fone").value.trim();
     const servicos=[...card.querySelectorAll(".pf-serv.sel")].map(c=>c.dataset.serv);
     const horarios={};
     card.querySelectorAll(".pf-day").forEach(row=>{
@@ -760,9 +824,63 @@ $("btnSaveProf").onclick=()=>{
       const ins=row.querySelectorAll("input[type=time]");
       horarios[dow]= on ? {abre:ins[0].value,fecha:ins[1].value} : null;
     });
-    return {nome,servicos,horarios};
+    return {nome,fone,servicos,horarios};
   }).filter(p=>p.nome);
   renderProf(); salvarConfig("Profissionais salvos!");
+};
+
+/* ---------- RELATÓRIO / AGENDA POR PROFISSIONAL ---------- */
+function fetchItens(cb){
+  db.ref("agendamentos").once("value").then(snap=>{
+    const val=snap.val()||{}; const hoje=todayKey(); const itens=[];
+    Object.keys(val).forEach(date=>{ if(date<hoje) return; Object.keys(val[date]).forEach(pk=>{ Object.keys(val[date][pk]).forEach(id=>{ itens.push(Object.assign({date,profPath:pk,id},val[date][pk][id])); }); }); });
+    todosItens=itens; cb&&cb();
+  }).catch(()=>{ cb&&cb(); });
+}
+$("btnRelatorio").onclick=()=>{
+  if(demo){ toast("Demonstração: indisponível."); return; }
+  if(!(cfg.profissionais&&cfg.profissionais.length)){ toast("Cadastre profissionais primeiro."); return; }
+  $("rProf").innerHTML=cfg.profissionais.map(p=>{const n=profNome(p);return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join("");
+  $("rErr").textContent=""; $("rTexto").value="Carregando...";
+  $("relatModal").classList.add("show");
+  fetchItens(()=>gerarRelatorio());
+};
+function gerarRelatorio(){
+  const nome=$("rProf").value; const per=$("rPeriodo").value; const hoje=todayKey();
+  let limite=null;
+  if(per==="7"){ const d=new Date(); d.setDate(d.getDate()+6); limite=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  let itens=(todosItens||[]).filter(it=>it.profissional===nome);
+  if(per==="hoje") itens=itens.filter(it=>it.date===hoje);
+  else if(per==="7") itens=itens.filter(it=>it.date>=hoje && it.date<=limite);
+  itens.sort((a,b)=> a.date===b.date ? (a.inicio||"").localeCompare(b.inicio||"") : a.date.localeCompare(b.date));
+  let txt="*Agenda — "+nome+"*\n"+cfg.nomeSalao+"\n";
+  txt+=(per==="hoje"?"(hoje)":per==="7"?"(próximos 7 dias)":"(próximos agendamentos)")+"\n";
+  if(!itens.length){ txt+="\nNenhum atendimento no período. 🌿"; }
+  else{
+    let cur="", count=0;
+    itens.forEach(it=>{
+      if(it.date!==cur){ cur=it.date; txt+="\n📅 "+extenso(it.date)+"\n"; }
+      if(it.bloqueio){ txt+="🔒 "+it.inicio+" — "+(it.motivo||"Bloqueado")+"\n"; }
+      else{ txt+="• "+it.inicio+" — "+it.servico+(it.cliente?" — "+it.cliente:"")+"\n"; count++; }
+    });
+    txt+="\nTotal: "+count+" atendimento"+(count!==1?"s":"")+".";
+  }
+  $("rTexto").value=txt;
+}
+$("rProf").addEventListener("change",gerarRelatorio);
+$("rPeriodo").addEventListener("change",gerarRelatorio);
+$("rFechar").onclick=()=>$("relatModal").classList.remove("show");
+$("rCopiar").onclick=()=>{
+  const t=$("rTexto").value; if(!t) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>toast("Copiado! ✅")).catch(()=>toast("Não consegui copiar.")); }
+  else { $("rTexto").select(); toast("Selecionado — toque em copiar."); }
+};
+$("rEnviar").onclick=()=>{
+  const p=acharProf($("rProf").value);
+  const dig=((p&&p.fone)||"").replace(/\D/g,""); const wa=dig.length>=10?(dig.length<=11?"55"+dig:dig):"";
+  if(!wa){ $("rErr").textContent="Cadastre o WhatsApp dessa profissional (na seção Profissionais) e salve."; return; }
+  $("rErr").textContent="";
+  window.open("https://wa.me/"+wa+"?text="+encodeURIComponent($("rTexto").value),"_blank");
 };
 
 /* ---------- BACKUP ---------- */
