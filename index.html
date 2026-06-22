@@ -119,7 +119,8 @@
   <div class="ico"></div><h2>Horário reservado!</h2>
   <p>Anote ou tire um print pra guardar 📸</p>
   <div id="doneDetails" class="resumo-card"></div>
-  <button class="btn" id="addCal" style="margin-top:18px;background:var(--accent);box-shadow:none">📅 Adicionar à minha agenda</button>
+  <button class="btn" id="copiarResumo" style="margin-top:14px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);box-shadow:none">📋 Copiar resumo</button>
+  <button class="btn" id="addCal" style="margin-top:10px;background:var(--accent);box-shadow:none">📅 Adicionar à minha agenda</button>
   <button class="btn again" id="againBtn">Fazer outro agendamento</button>
 </div>
 
@@ -368,11 +369,19 @@ $("confirm").onclick=async ()=>{
   linhas.push(["Local", CONFIG.nomeSalao]);
   if(CONFIG.endereco) linhas.push(["Endereço", CONFIG.endereco]);
   $("doneDetails").innerHTML=linhas.map(r=>'<div class="r-row"><span>'+escH(r[0])+'</span><b>'+escH(r[1])+'</b></div>').join("");
+  resumoTexto="*Agendamento — "+CONFIG.nomeSalao+"*\n"+linhas.map(r=>r[0]+": "+r[1]).join("\n");
 
   $("formArea").style.display="none"; $("bar").style.display="none";
   $("done").classList.add("show"); window.scrollTo(0,0);
 };
 $("againBtn").onclick=()=>location.reload();
+let resumoTexto="";
+$("copiarResumo").onclick=()=>{
+  if(!resumoTexto) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(resumoTexto).then(()=>toast("Resumo copiado! ✅")).catch(()=>toast("Não consegui copiar."));
+  }else{ toast("Tire um print pra guardar 📸"); }
+};
 
 /* ---------- Adicionar à agenda do celular (.ics) ---------- */
 let ultimoAgendamento=null;
